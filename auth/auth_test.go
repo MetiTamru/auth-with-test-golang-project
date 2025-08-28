@@ -17,11 +17,23 @@ var _ = Describe("AuthService", func() {
 	})
 
 	Describe("Register", func() {
+
+
 		Context("successful registration", func() {
+
 			It("should register a user without error", func() {
 				err := auth.Register("meti", "meti1234")
 				Expect(err).ToNot(HaveOccurred())
 			})
+
+
+				It("should register a user with special character in their name and password", func() {
+
+				err := auth.Register("meti@gmail.com", "meti%&*()")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+
 		})
 
 		Context("failed registration", func() {
@@ -30,17 +42,15 @@ var _ = Describe("AuthService", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("cannot be empty"))
 			})
-		})
 
-		Context("failed registration", func() {
+
 			It("should return and error for empty user name", func() {
 				err := auth.Register("", "meti1234")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("cannot be empty"))
 			})
-		})
 
-		Context("failed registration due to duplication", func() {
+			
 			It("should return and error for duplicated user name", func() {
 				err := auth.Register("meti", "meti1234")
 				Expect(err).ToNot(HaveOccurred())
@@ -50,17 +60,10 @@ var _ = Describe("AuthService", func() {
 
 				Expect(err.Error()).To(ContainSubstring("already exist"))
 			})
+
 		})
 
-		Context("successful registration", func() {
-
-			It("should register a user with special character in their name and password", func() {
-
-				err := auth.Register("meti@gmail.com", "meti%&*()")
-				Expect(err).ToNot(HaveOccurred())
-			})
-		})
-
+		
 		Context("safe password hashing", func() {
 
 			It("hash the password of a new registered user correctly not plain text", func() {
@@ -83,6 +86,7 @@ var _ = Describe("AuthService", func() {
         Expect(err).ToNot(HaveOccurred())
 			})
 		})
+
 
 		Context("safe concurrency",func ()  {
 			It("should hadle concurret registration safely",func ()  {
@@ -120,6 +124,8 @@ var _ = Describe("AuthService", func() {
 		Describe("Login", func() {
 
 		Context("successful login", func() {
+
+
 			It("should login a user without error", func() {
 				err := auth.Register("meti", "meti1234")
 				Expect(err).ToNot(HaveOccurred())
@@ -129,9 +135,22 @@ var _ = Describe("AuthService", func() {
 				Expect(logErr).ToNot(HaveOccurred())
 				Expect(token).ToNot(BeEmpty())
 			})
+
+				It("should login a user with special character user name and password", func() {
+
+				err := auth.Register("meti@yahoo.com", "meti(&^%$")
+				Expect(err).ToNot(HaveOccurred())
+
+				token, logErr := auth.Login("meti@yahoo.com","meti(&^%$")
+
+				Expect(logErr).ToNot(HaveOccurred())
+				Expect(token).ToNot(BeEmpty())
+			})
+
 		})
 
 		Context("failed login", func() {
+			
 			It("should return and error for empty password", func() {
 				err := auth.Register("meti", "meti1234")
 				Expect(err).ToNot(HaveOccurred())
@@ -142,9 +161,7 @@ var _ = Describe("AuthService", func() {
 				Expect(token).To(BeEmpty())
 				Expect(logErr.Error()).To(ContainSubstring("cannot be empty"))
 			})
-		})
 
-		Context("failed login", func() {
 			It("should return and error for empty user name", func() {
 				err := auth.Register("meti", "meti1234")
 				Expect(err).ToNot(HaveOccurred())
@@ -155,9 +172,7 @@ var _ = Describe("AuthService", func() {
 				Expect(token).To(BeEmpty())
 				Expect(logErr.Error()).To(ContainSubstring("cannot be empty"))
 			})
-		})
 
-		Context("failed login", func() {
 			It("should return and error for wrong password", func() {
 				err := auth.Register("meti", "meti1234")
 				Expect(err).ToNot(HaveOccurred())
@@ -168,10 +183,8 @@ var _ = Describe("AuthService", func() {
 				Expect(token).To(BeEmpty())
 				Expect(logErr.Error()).To(ContainSubstring("invalid password"))
 			})
-		})
 
-		Context("failed login", func() {
-			It("should return and error for non existing user", func() {
+				It("should return and error for non existing user", func() {
 				err := auth.Register("meti", "meti1234")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -181,20 +194,9 @@ var _ = Describe("AuthService", func() {
 				Expect(token).To(BeEmpty())
 				Expect(logErr.Error()).To(ContainSubstring("user does not exist"))
 			})
+			
 		})
 
-		Context("succesful login", func() {
-			It("should login a user with special character user name and password", func() {
-
-				err := auth.Register("meti@yahoo.com", "meti(&^%$")
-				Expect(err).ToNot(HaveOccurred())
-
-				token, logErr := auth.Login("meti@yahoo.com","meti(&^%$")
-
-				Expect(logErr).ToNot(HaveOccurred())
-				Expect(token).ToNot(BeEmpty())
-			})
-		})
 
 		Context("safe concurrency",func ()  {
 			It("should hadle concurret login safely",func ()  {
