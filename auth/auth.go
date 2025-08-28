@@ -49,7 +49,7 @@ func (a *authService) Register(username, password string) error {
 	a.users[username] = string(hashedPassword)
 	return nil
 }
-
+ 
 
 func (a *authService) Login(username, password string) (string, error) {
 
