@@ -2,8 +2,7 @@ package auth
 
 import (
 
-	"sync"
-
+	 "sync"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/crypto/bcrypt"
