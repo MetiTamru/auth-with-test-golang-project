@@ -1,232 +1,235 @@
 package auth
 
 import (
-    "fmt"
-    "strings"
-    "sync"
-    "testing"
-    "golang.org/x/crypto/bcrypt"
+
+	"sync"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"golang.org/x/crypto/bcrypt"
 )
 
-func assertNoError(t *testing.T, err error) {
-    t.Helper()
-    if err != nil {
-        t.Fatalf("expected no error, got %v", err)
-    }
-}
 
-func assertError(t *testing.T, err error) {
-    t.Helper()
-    if err == nil {
-        t.Fatal("expected error but got none")
-    }
-}
+var _ = Describe("AuthService", func() {
+	var auth AuthService
 
-func assertErrorContains(t *testing.T, err error, expectedContains string) {
-    t.Helper()
-    assertError(t, err)
-    if !strings.Contains(err.Error(), expectedContains) {
-        t.Fatalf("expected error containing '%s', got '%v'", expectedContains, err)
-    }
-}
+	BeforeEach(func() {
+		auth = NewAuthService()
+	})
 
-func assertEqual[T comparable](t *testing.T, got, want T) {
-    t.Helper()
-    if got != want {
-        t.Fatalf("expected %v, got %v", want, got)
-    }
-}
+	Describe("Register", func() {
+		Context("successful registration", func() {
+			It("should register a user without error", func() {
+				err := auth.Register("meti", "meti1234")
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
 
-func TestRegister(t *testing.T) {
-    t.Run("successful registration", func(t *testing.T) {
-        user := NewAuthService()
-        err := user.Register("meti", "meti1234")
-        
-        assertNoError(t, err)
-    })
+		Context("failed registration", func() {
+			It("should return and error for empty password", func() {
+				err := auth.Register("meti", "")
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("cannot be empty"))
+			})
+		})
 
-    t.Run("registration with empty username", func(t *testing.T) {
-        user := NewAuthService()
-        err := user.Register("", "meti1234")
-        
-        assertErrorContains(t, err, "cannot be empty")
-    })
+		Context("failed registration", func() {
+			It("should return and error for empty user name", func() {
+				err := auth.Register("", "meti1234")
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("cannot be empty"))
+			})
+		})
 
-    t.Run("registration with empty password", func(t *testing.T) {
-        user := NewAuthService()
-        err := user.Register("meti", "")
-        
-        assertErrorContains(t, err, "cannot be empty")
-    })
+		Context("failed registration due to duplication", func() {
+			It("should return and error for duplicated user name", func() {
+				err := auth.Register("meti", "meti1234")
+				Expect(err).ToNot(HaveOccurred())
 
-    t.Run("duplicate username registration", func(t *testing.T) {
-        user := NewAuthService()
-        assertNoError(t, user.Register("meti", "meti1234"))
-        err := user.Register("meti", "meti2244")
-        
-        assertErrorContains(t, err, "already exist")
-    })
+				err = auth.Register("meti", "meti2244")
+				Expect(err).To(HaveOccurred())
 
-    t.Run("registration with special characters", func(t *testing.T) {
-        user := NewAuthService()
-				err := user.Register("meti@gmail.com", "@meti##**")
-        
+				Expect(err.Error()).To(ContainSubstring("already exist"))
+			})
+		})
 
-				assertNoError(t, err)
-    })
+		Context("successful registration", func() {
 
-    t.Run("password should be hashed when registering a user", func(t *testing.T) {
-        user := NewAuthService().(*authService)
+			It("should register a user with special character in their name and password", func() {
+
+				err := auth.Register("meti@gmail.com", "meti%&*()")
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		Context("safe password hashing", func() {
+
+			It("hash the password of a new registered user correctly not plain text", func() {
+
+
+        auth := NewAuthService().(*authService)  
         password := "meti1234"
-        
-         err := user.Register("meti", password)
-        assertNoError(t, err)
-        
-         user.mu.RLock()
-        storedHash := user.users["meti"]
-        user.mu.RUnlock()
-        
-         assertEqual(t, storedHash == password, false)
-        
+
+				err := auth.Register("meti",password)
+				Expect(err).ToNot(HaveOccurred())
+
+				auth.mu.RLock()
+				storedHash := auth.users["meti"]
+				auth.mu.RUnlock()
+
+				Expect(storedHash).ToNot(Equal(password))
 
 				err = bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password))
-        assertNoError(t, err)
-    })
 
-    t.Run("concurrent registration safety", func(t *testing.T) {
-        user := NewAuthService()
-        var wg sync.WaitGroup
-        trail := 100
-        results := make(chan error, trail)
-        
+        Expect(err).ToNot(HaveOccurred())
+			})
+		})
 
-				for i := 0; i < trail; i++ {
-            wg.Add(1)
-            go func() {
-                defer wg.Done()
-                err := user.Register("New_user", "newuser12")
-                results <- err
-            }()
-        }
-        wg.Wait()
-        close(results)
-        
+		Context("safe concurrency",func ()  {
+			It("should hadle concurret registration safely",func ()  {
+			  var wg sync.WaitGroup
+				attempt := 100
+				result := make(chan error, attempt)
+				
+				for i := 0; i < attempt; i++ {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						err := auth.Register("meti","meti1234")
+						result <- err
+					}()
+				}
+				wg.Wait()
+				close(result)
 
 				successCount := 0
-        for err := range results {
-            if err == nil {
-                successCount++
-            }
-        }
-        assertEqual(t, successCount, 1) 
-    })
-}
 
-func TestLogin(t *testing.T) {
-    t.Run("successful login with valid user", func(t *testing.T) {
-        user := NewAuthService()
-        assertNoError(t, user.Register("meti", "meti1234"))
-        
-         token, err := user.Login("meti", "meti1234")
-        
+				for err := range result {
+					if err == nil {
+						successCount++
+					}
+				}
+				Expect(successCount).To(Equal(1))
+			})
+		})
 
-				assertNoError(t, err)
-        assertEqual(t, token, "jwt_token_for_meti")
-    })
+	})
 
-    t.Run("login with empty username", func(t *testing.T) {
-        user := NewAuthService()
-        assertNoError(t, user.Register("meti", "meti1234"))
-        
-        token, err := user.Login("", "meti1234")
-        
-        assertErrorContains(t, err, "cannot be empty")
-        assertEqual(t, token, "")
-    })
 
-    t.Run("login with empty password", func(t *testing.T) {
-        user := NewAuthService()
-        assertNoError(t, user.Register("meti", "meti1234"))
-        
-        token, err := user.Login("meti", "")
-        
-        assertErrorContains(t, err, "cannot be empty")
-        assertEqual(t, token, "")
-    })
+	//login tests
 
-    t.Run("login with non-existent user", func(t *testing.T) {
-        user := NewAuthService()
-        assertNoError(t, user.Register("meti", "meti1234"))
-        
+		Describe("Login", func() {
 
-				token, err := user.Login("nonexistent", "meti1234")
-        
-        assertErrorContains(t, err, "does not exist")
-        assertEqual(t, token, "")
-    })
+		Context("successful login", func() {
+			It("should login a user without error", func() {
+				err := auth.Register("meti", "meti1234")
+				Expect(err).ToNot(HaveOccurred())
 
-    t.Run("login with wrong password", func(t *testing.T) {
-        user := NewAuthService()
-        assertNoError(t, user.Register("meti", "meti1234"))
-        
-        token, err := user.Login("meti", "wrongpassword")
-        
+				token, logErr := auth.Login("meti","meti1234")
 
-				assertErrorContains(t, err, "invalid password")
-        assertEqual(t, token, "")
-    })
+				Expect(logErr).ToNot(HaveOccurred())
+				Expect(token).ToNot(BeEmpty())
+			})
+		})
 
-    t.Run("login with special characters", func(t *testing.T) {
-        user := NewAuthService()
-        assertNoError(t, user.Register("meti@gmail.com", "@meti##**"))
-        
+		Context("failed login", func() {
+			It("should return and error for empty password", func() {
+				err := auth.Register("meti", "meti1234")
+				Expect(err).ToNot(HaveOccurred())
 
-				token, err := user.Login("meti@gmail.com", "@meti##**")
-        
-        assertNoError(t, err)
-        assertEqual(t, token, "jwt_token_for_meti@gmail.com")
-    })
+				token, logErr := auth.Login("meti","")
 
-    t.Run("safe concurrent login", func(t *testing.T) {
+				Expect(logErr).To(HaveOccurred())
+				Expect(token).To(BeEmpty())
+				Expect(logErr.Error()).To(ContainSubstring("cannot be empty"))
+			})
+		})
 
-			user := NewAuthService()
-        assertNoError(t, user.Register("meti", "meti1234"))
-        var wg sync.WaitGroup
-        trail := 100
-        results := make(chan error, trail)
-        
+		Context("failed login", func() {
+			It("should return and error for empty user name", func() {
+				err := auth.Register("meti", "meti1234")
+				Expect(err).ToNot(HaveOccurred())
 
-				for i := 0; i < trail; i++ {
-            wg.Add(1)
-            go func() {
-                defer wg.Done()
-                _, err := user.Login("meti", "meti1234")
-                results <- err
-            }()
-        }
-        wg.Wait()
-        close(results)
-        
+				token, logErr := auth.Login("","meti1234")
 
-				for err := range results {
-            assertNoError(t, err)
-        }
-    })
-}
+				Expect(logErr).To(HaveOccurred())
+				Expect(token).To(BeEmpty())
+				Expect(logErr.Error()).To(ContainSubstring("cannot be empty"))
+			})
+		})
 
-func BenchmarkRegister(b *testing.B) {
-    user := NewAuthService()
+		Context("failed login", func() {
+			It("should return and error for wrong password", func() {
+				err := auth.Register("meti", "meti1234")
+				Expect(err).ToNot(HaveOccurred())
 
-    for i := 0; i < b.N; i++ {
-        user.Register(fmt.Sprintf("meti %d", i), "meti1234")
-    }
-}
+				token, logErr := auth.Login("meti","meti12345")
 
-func BenchmarkLogin(b *testing.B) {
-    user := NewAuthService()
-    user.Register("meti", "meti1234")
+				Expect(logErr).To(HaveOccurred())
+				Expect(token).To(BeEmpty())
+				Expect(logErr.Error()).To(ContainSubstring("invalid password"))
+			})
+		})
 
-    for i := 0; i < b.N; i++ {
-        user.Login("meti", "meti1234")
-    }
-}
+		Context("failed login", func() {
+			It("should return and error for non existing user", func() {
+				err := auth.Register("meti", "meti1234")
+				Expect(err).ToNot(HaveOccurred())
+
+				token, logErr := auth.Login("meti-tamiru","meti1234")
+
+				Expect(logErr).To(HaveOccurred())
+				Expect(token).To(BeEmpty())
+				Expect(logErr.Error()).To(ContainSubstring("user does not exist"))
+			})
+		})
+
+		Context("succesful login", func() {
+			It("should login a user with special character user name and password", func() {
+
+				err := auth.Register("meti@yahoo.com", "meti(&^%$")
+				Expect(err).ToNot(HaveOccurred())
+
+				token, logErr := auth.Login("meti@yahoo.com","meti(&^%$")
+
+				Expect(logErr).ToNot(HaveOccurred())
+				Expect(token).ToNot(BeEmpty())
+			})
+		})
+
+		Context("safe concurrency",func ()  {
+			It("should hadle concurret login safely",func ()  {
+			  
+				var wg sync.WaitGroup
+
+				err := auth.Register("meti","meti1234")
+				Expect(err).ToNot(HaveOccurred())
+
+				attempt := 100
+				result := make(chan error, attempt)
+				
+
+				for i := 0; i < attempt; i++ {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+           _, err := auth.Login("meti", "meti1234")
+						result <- err
+					}()
+				}
+				wg.Wait()
+				close(result)
+
+				successCount := 0
+
+				for err := range result {
+					if err == nil {
+						successCount++
+					}
+				}
+				Expect(successCount).To(Equal(100))
+			})
+		})
+
+	})
+})
